@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+import tkinter as tk
+from tkinter import ttk, messagebox
+from PIL import Image, ImageTk
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import LabelEncoder
+
+file_path = "......................"  # Adjust the path as needed
+df = pd.read_csv(file_path)
+df = df.dropna()
+
+#
+label_encoder_genre = LabelEncoder()
+df['Genre'] = label_encoder_genre.fit_transform(df['Genre'])
+
+label_encoder_cast = LabelEncoder()
+df['Cast'] = label_encoder_cast.fit_transform(df['Cast'])
+
+# Prepare data for training
+X = df[['Budget', 'Genre', 'Cast']]
+y = df['Box_office']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train the model
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Evaluate the model
+y_pred = model.predict(X_test)
+
+# Calculate R-squared and Mean Squared Error
+r2 = r2_score(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+
+print(f"R-squared: {r2:.2f}")
+print(f"Mean Squared Error: {mse:.2f}")
+
+# Create the Tkinter application
+class MoviePredictionApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Movie Box Office Predictor")
+
+        # Create Canvas for background and transparent text
+        self.canvas = tk.Canvas(self.root, bg='white', highlightthickness=0)
+        self.canvas.place(relwidth=1, relheight=1)
+
+        # Load and set background image
+        self.load_and_set_background()
+
+        # Create and place widgets
+        self.create_widgets()
+
+    def load_and_set_background(self):
+        # Load the background image
+        self.original_image = Image.open("view-3d-cinema-theatre-room.jpg")  # Path to your background image
+        self.update_background_image()
+
+        # Set background image to Canvas
+        self.background_image_id = self.canvas.create_image(0, 0, anchor='nw', image=self.background_photo)
+
+        # Bind resize event to adjust the background image
+        self.root.bind("<Configure>", self.on_resize)
+
+    def update_background_image(self):
+        # Resize the image to fit the window size
+        self.background_image_resized = self.original_image.resize(
+            (self.root.winfo_width(), self.root.winfo_height()), Image.LANCZOS
+        )
+        self.background_photo = ImageTk.PhotoImage(self.background_image_resized)
+
+        # Update the canvas background image
+        if hasattr(self, 'background_image_id'):
+            self.canvas.itemconfig(self.background_image_id, image=self.background_photo)
+
+    def on_resize(self, event):
+        # Update the background image when the window is resized
+        self.update_background_image()
+
+    def create_widgets(self):
+        # Font style
+        font_style = ("Helvetica", 16, "bold")
+
+        # Heading
+        self.canvas.create_text(900, 50, text="Movie Box Office Predictor", font=("Helvetica", 40, "bold"), fill="Red")
+
+        # Validate command for budget input
+        validate_cmd = self.root.register(self.validate_budget_input)
+
+        # Budget input
+        self.canvas.create_text(800, 120, text="Budget:", font=font_style, fill="White")
+        self.budget_entry = tk.Entry(self.root, font=font_style, validate='key', validatecommand=(validate_cmd, '%P'))
+        self.canvas.create_window(950, 120, window=self.budget_entry, width=200)
+
+        # Genre input
+        self.canvas.create_text(780, 160, text="Genre Name:", font=font_style, fill="White")
+        self.genre_entry = tk.Entry(self.root, font=font_style)
+        self.canvas.create_window(950, 160, window=self.genre_entry, width=200)
+
+        # Cast input
+        self.canvas.create_text(780, 200, text="Cast Name:", font=font_style, fill="White")
+        self.cast_entry = tk.Entry(self.root, font=font_style)
+        self.canvas.create_window(950, 200, window=self.cast_entry, width=200)
+
+        # Predict button
+        self.predict_button = tk.Button(self.root, text="Predict", font=font_style, command=self.predict)
+        self.canvas.create_window(850, 260, window=self.predict_button, width=100)
+
+        # Reset button
+        self.reset_button = tk.Button(self.root, text="Reset", font=font_style, command=self.reset)
+        self.canvas.create_window(950, 260, window=self.reset_button, width=100)
+
+        # Result display
+        self.result_label = self.canvas.create_text(900, 320, text="", font=font_style, fill="Black")
+
+    def validate_budget_input(self, new_value):
+        if new_value == "" or new_value.replace('.', '', 1).isdigit():
+            return True
+        else:
+            return False
+
+    def predict(self):
+        try:
+            budget = float(self.budget_entry.get())
+            genre_name = self.genre_entry.get()
+            cast_name = self.cast_entry.get()
+
+            # Encode inputs
+            genre_encoded = label_encoder_genre.transform([genre_name])[0]
+            cast_encoded = label_encoder_cast.transform([cast_name])[0]
+
+            # Create DataFrame for input
+            input_data = pd.DataFrame([[budget, genre_encoded, cast_encoded]], columns=['Budget', 'Genre', 'Cast'])
+            prediction = model.predict(input_data)[0]
+
+            # Format prediction in INR
+            prediction_inr = f"₹{prediction:,.2f}"
+            self.canvas.itemconfig(self.result_label, text=f"Predicted Box Office Earnings: {prediction_inr}")
+
+            # Check for profit or loss
+            if prediction > budget:
+                profit = prediction - budget
+                messagebox.showinfo("Profit/Loss", f"Profit: ₹{profit:,.2f}")
+            else:
+                loss = budget - prediction
+                messagebox.showwarning("Profit/Loss", f"Loss: ₹{loss:,.2f}")
+        except ValueError:
+            messagebox.showerror("Input Error", "Invalid input. Please enter valid values.")
+
+    def reset(self):
+        self.budget_entry.delete(0, tk.END)
+        self.genre_entry.delete(0, tk.END)
+        self.cast_entry.delete(0, tk.END)
+        self.canvas.itemconfig(self.result_label, text="")
+
+# Run the Tkinter application
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = MoviePredictionApp(root)
+    root.mainloop()
